@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+import os
 import sqlite3
 from typing import Optional
 
@@ -9,7 +10,8 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT / "threatlens.db"
+DB_PATH = Path(os.getenv("THREATLENS_DB_PATH", str(ROOT / "threatlens.db")))
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
 class SecurityEvent(BaseModel):
@@ -66,12 +68,13 @@ def now_iso():
 def detect(event: SecurityEvent):
     """Simple transparent rules for synthetic/lab events; not a production IDS."""
     with connect() as con:
-        con.execute(
+        cur = con.execute(
             """INSERT INTO events(timestamp, source_ip, username, event_type, message, destination_port)
                VALUES (?, ?, ?, ?, ?, ?)""",
             (event.timestamp or now_iso(), event.source_ip, event.username, event.event_type,
              event.message, event.destination_port),
         )
+        event_id = cur.lastrowid
 
         if event.event_type == "login_failed":
             count = con.execute(
@@ -103,7 +106,7 @@ def detect(event: SecurityEvent):
                 f"A request was flagged for review from {event.source_ip}. Inspect the request context and application logs.",
                 1,
             )
-        return con.execute("SELECT last_insert_rowid()").fetchone()[0]
+        return event_id
 
 
 def create_alert(con, ip, severity, title, description, event_count):
