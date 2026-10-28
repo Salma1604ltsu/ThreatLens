@@ -3,6 +3,8 @@ services:
     build: .
     ports:
       - "127.0.0.1:8000:8000"
+    environment:
+      THREATLENS_DB_PATH: /app/data/threatlens.db
     volumes:
       - ./data:/app/data
     restart: unless-stopped
